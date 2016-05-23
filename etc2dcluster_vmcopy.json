@@ -1,0 +1,126 @@
+ {
+    "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+      "discoveryUrl": {
+        "type": "string",
+        "metadata": { 
+          "description": "discoveryUrl for etcd2 cluster" 
+        }
+      },
+      "storageAccounts_name": {
+        "type": "string",
+        "defaultValue": "deisv27912" 
+      },
+      "vnet_name": {
+        "type": "string",
+        "defaultValue": "deisv2" 
+      },
+      "virtualMachines_testmc1_adminPassword": {
+          "defaultValue": null,
+          "type": "securestring"
+      },
+      "vmSize": {
+        "type": "string",
+        "defaultValue": "Standard_DS1_v2"
+      },
+      "numberOfNodes": {
+        "type": "int",
+        "defaultValue": 2
+      }
+    },
+    "variables": {
+      "vmNamePrefix":"kh1",
+      "unitFile": "[concat('#cloud-config\ncoreos:\n  etcd2:\n    discovery: ', parameters('discoveryUrl'),'\n    advertise-client-urls: http://$private_ipv4:2379,http://$private_ipv4:4001\n    initial-advertise-peer-urls: http://$private_ipv4:2380\n    listen-client-urls: http://0.0.0.0:2379,http://0.0.0.0:4001\n    listen-peer-urls: http://$private_ipv4:2380\n  units:\n    - name: etcd2.service\n      command: start\n    - name: fleet.service\n      command: start')]"
+
+    },
+    "resources": [     
+      {
+          "type": "Microsoft.Network/networkInterfaces",
+          "name": "[concat('nic', variables('vmNamePrefix'), copyindex())]",
+          "apiVersion": "2015-06-15",
+          "location": "northeurope",
+          "copy": {
+            "name": "nicLoop",
+            "count": "[parameters('numberOfNodes')]"
+          },
+          "properties": {
+              "ipConfigurations": [
+                  {
+                      "name": "ipconfig1",
+                      "properties": {
+                          "privateIPAllocationMethod": "Dynamic",
+                          "subnet": {
+                              "id": "[concat(resourceId('Microsoft.Network/virtualNetworks', parameters('vnet_name')), '/subnets/default')]"
+                          }
+                      }
+                  }
+              ],
+              "dnsSettings": {
+                  "dnsServers": []
+              },
+              "enableIPForwarding": false
+          }
+      },
+      {
+            "type": "Microsoft.Compute/virtualMachines",
+            "name": "[concat(variables('vmNamePrefix'), copyindex())]",
+            "apiVersion": "2015-06-15",
+            "location": "northeurope",
+            "dependsOn": [
+                "[resourceId('Microsoft.Network/networkInterfaces', concat('nic', variables('vmNamePrefix'), copyindex()))]"
+            ],
+             "copy": {
+              "name": "vmLoop",
+              "count": "[parameters('numberOfNodes')]"
+            },
+            "properties": {
+                "hardwareProfile": {
+                    "vmSize": "[parameters('vmSize')]"
+                },
+                "storageProfile": {
+                    "imageReference": {
+                        "publisher": "CoreOS",
+                        "offer": "CoreOS",
+                        "sku": "Stable",
+                        "version": "latest"
+                    },
+                    "osDisk": {
+                        "name": "[concat(variables('vmNamePrefix'), copyindex())]",
+                        "createOption": "FromImage",
+                        "vhd": {
+                            "uri": "[concat('https', '://', parameters('storageAccounts_name'), '.blob.core.windows.net', concat('/vhds/', variables('vmNamePrefix'), copyindex(), '.vhd'))]"
+                        },
+                        "caching": "ReadWrite"
+                    },
+                    "dataDisks": []
+                },
+                "osProfile": {
+                    "computerName": "[concat(variables('vmNamePrefix'), copyindex())]",
+                    "adminUsername": "kehowli",
+                    "customData": "[base64(variables('unitFile'))]",
+                    "linuxConfiguration": {
+                        "disablePasswordAuthentication": true,
+                        "ssh": {
+                            "publicKeys": [
+                                {
+                                    "path": "/home/kehowli/.ssh/authorized_keys",
+                                    "keyData": "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQCgi3tlw9iZjKjEK2Nzwjun4FRm7pb/4MCo7LTodPoLsdtYBz9MeyTDphI5FOK9Hj1I00hNSI6/WoCFtHAmmMfH35hnab3q3qIpNNP0dVZArbdgQAAluqgr5R1hLF6ZN0MesfkQej+TMLz0wPgBHJ0n8I82fzc+fZIXdInoB1heqyncD3aeiS8Br6RZ2dTK8CivpWO9FMMu4fndbU7w+trIjCbOalzm0YMjg5/aE9pkHgtSXwJ034cA/xA5L3Cd0IRCA5ZPliWNGxeCGTuZmLxT/0mytN2yMQJoXVEhOXQaxVF2Ita0o1b3bvq4rUqxpuyXE1lNv0MAf2QciDxUPLqN"
+                                }
+                            ]
+                        }
+                    },
+                    "secrets": [],
+                    "adminPassword": "[parameters('virtualMachines_testmc1_adminPassword')]"
+                },
+                "networkProfile": {
+                    "networkInterfaces": [
+                        {
+                            "id": "[resourceId('Microsoft.Network/networkInterfaces', concat('nic', variables('vmNamePrefix'), copyindex()))]"
+                        }
+                    ]
+                }
+            }
+        }
+    ]
+}

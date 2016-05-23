@@ -1,0 +1,114 @@
+ {
+    "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+      "discoveryUrl": {
+        "type": "string",
+        "metadata": { 
+          "description": "discoveryUrl for etcd2 cluster, generate using curl 'https://discovery.etcd.io/new?size=3'" 
+        }
+      },
+      "storageAccounts_name": {
+        "type": "string"
+      },
+      "vnet_name": {
+        "type": "string"
+      },
+      "adminUsername": {
+        "type": "string"
+      },
+      "vmSize": {
+        "type": "string"
+      },
+      "sshKeyData": {
+        "type": "string"
+      },
+      "numberOfNodes": {
+        "type": "int"
+      }
+    },
+    "variables": {
+      "vmNamePrefix":"kh1",
+      "unitFile": "[concat('#cloud-config\ncoreos:\n  etcd2:\n    discovery: ', parameters('discoveryUrl'),'\n    advertise-client-urls: http://$private_ipv4:2379,http://$private_ipv4:4001\n    initial-advertise-peer-urls: http://$private_ipv4:2380\n    listen-client-urls: http://0.0.0.0:2379,http://0.0.0.0:4001\n    listen-peer-urls: http://$private_ipv4:2380\n  units:\n    - name: etcd2.service\n      command: start\n    - name: fleet.service\n      command: start')]"
+
+    },
+    "resources": [     
+      {
+            "type": "Microsoft.Compute/virtualMachineScaleSets",
+            "name": "[variables('vmNamePrefix')]",
+            "apiVersion": "2015-06-15",
+            "location": "northeurope",
+            "sku": {
+                "name": "[parameters('vmSize')]",
+                "tier": "Standard",
+                "capacity": "[parameters('numberOfNodes')]"
+            },
+            "properties": {
+                "upgradePolicy": {
+                "mode": "Manual"
+                },
+                "virtualMachineProfile": {
+                    "storageProfile": {
+                        "imageReference": {
+                            "publisher": "CoreOS",
+                            "offer": "CoreOS",
+                            "sku": "Stable",
+                            "version": "latest"
+                        },
+                        "osDisk": {
+                            "name": "[variables('vmNamePrefix')]",
+                            "caching": "ReadWrite",
+                            "createOption": "FromImage",
+                            "vhdContainers": [
+                                "[concat('https', '://', parameters('storageAccounts_name'), '.blob.core.windows.net/', concat(variables('vmNamePrefix'), 'vhds'))]"
+                            ]
+                        }
+                    },
+                    "osProfile": {
+                        "computerNamePrefix": "[variables('vmNamePrefix')]",
+                        "adminUsername": "[parameters('adminUsername')]",
+                        "customData": "[base64(variables('unitFile'))]",
+                        "linuxConfiguration": {
+                            "disablePasswordAuthentication": true,
+                            "ssh": {
+                                "publicKeys": [
+                                    {
+                                        "path": "/home/kehowli/.ssh/authorized_keys",
+                                        "keyData":"[parameters('sshKeyData')]"
+                                    }
+                                ]
+                            }
+                        },
+                        "secrets": [],
+                        "adminPassword": "null"
+                    },
+                    "networkProfile": {
+                        "networkInterfaceConfigurations": [
+                            {
+                                "name": "[concat('nic', variables('vmNamePrefix'))]",
+                                "properties": {
+                                    "primary": true,
+                                    "ipConfigurations": [
+                                        {
+                                            "name": "ipconfig1",
+                                            "properties": {
+                                                "privateIPAllocationMethod": "Dynamic",
+                                                "subnet": {
+                                                    "id": "[concat(resourceId('Microsoft.Network/virtualNetworks', parameters('vnet_name')), '/subnets/default')]"
+                                                }
+                                            }
+                                        }
+                                    ],
+                                    "dnsSettings": {
+                                        "dnsServers": []
+                                    },
+                                    "enableIPForwarding": false
+                                }
+                            }
+                         ]
+                    }
+                }
+            }
+        }
+    ]
+}

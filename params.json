@@ -1,0 +1,27 @@
+{ 
+   "$schema": "http://schema.management.azure.com/schemas/2015-01-01/deploymentParameters.json#", 
+   "contentVersion": "1.0.0.0", 
+   "parameters": { 
+     "storageAccounts_name": { 
+       "value": "deisv27912" 
+     }, 
+     "vnet_name": {
+       "value": "deisv2"
+     },
+     "vmSize": { 
+       "value": "Standard_DS1_v2" 
+     }, 
+     "numberOfNodes": { 
+       "value": 2 
+     }, 
+     "adminUsername": { 
+       "value": "kehowli" 
+     }, 
+     "sshKeyData": { 
+       "value": "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQCgi3tlw9iZjKjEK2Nzwjun4FRm7pb/4MCo7LTodPoLsdtYBz9MeyTDphI5FOK9Hj1I00hNSI6/WoCFtHAmmMfH35hnab3q3qIpNNP0dVZArbdgQAAluqgr5R1hLF6ZN0MesfkQej+TMLz0wPgBHJ0n8I82fzc+fZIXdInoB1heqyncD3aeiS8Br6RZ2dTK8CivpWO9FMMu4fndbU7w+trIjCbOalzm0YMjg5/aE9pkHgtSXwJ034cA/xA5L3Cd0IRCA5ZPliWNGxeCGTuZmLxT/0mytN2yMQJoXVEhOXQaxVF2Ita0o1b3bvq4rUqxpuyXE1lNv0MAf2QciDxUPLqN kehowli@deis1" 
+     }, 
+     "discoveryUrl": { 
+       "value": "https://discovery.etcd.io/des01" 
+     } 
+   }
+}
