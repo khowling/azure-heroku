@@ -1,13 +1,86 @@
-systemd is an init system that provides many powerful features for starting, stopping and managing processes. Within the CoreOS world, you will almost exclusively use systemd to manage the lifecycle of your Docker containers
-On CoreOS, unit files are located within the R/W filesystem at /etc/systemd/system
+Background
+----------
 
-etcd: A highly-available distributed key value store for shared configuration and service discovery written in Go. Written by x-heroku guy, it Serves as the backbone of distributed systems by providing a canonical hub for cluster coordination and state management, used by Kubermetes & Cloud Foundry & Fleet. Uses the _Raft_ protocol for multiple nodes to maintain identical logs of state changing commands where any node can be treated as master.
+*terms*
+docker (ubuntu) or Rocket (coreOS) = a container technology to allow developers to package apps in linux containers. operating-system-level virtualization rather than hyperV hardware virtualization.
+
+scheduling (or packaging) = placing a single container on a single host based on the needs of the container (ie container needs 2Gm memory)
+
+Orchestration =  that an application topology is deployed across two or more hosts in such a way as to meet the business needs for the application, and deployment cycles (HA etc)
+
+Fleet, by CoreOs, is a packing primitive.  It is somewhat analogous to Docker's Swarm
+
+Mesosphere & Kubernetes = a Docker container management solution. Once specific containers are no longer bound to specific machines, host-centric infrastructure no longer works: managed groups, load balancing, auto-scaling, etc. One needs container-centric infrastructure. That’s what Kubernetes provides.
+
+*kubernetes* 
+  Kubernetes is unopinionated in the source-to-image space, but support layering CI workflows on Kubernetes 
+  a number of PaaS systems run on Kubernetes, such as Openshift, Deis, and Gondor, or roll your own.
+  
+Deis PaaS v1 = Fleet -> v2 = kubernetes
+ 
+*systemd* is an init system that provides many powerful features for starting, stopping and managing processes. Within the CoreOS world, you will almost exclusively use systemd to manage the lifecycle of your Docker containers
+On CoreOS, unit files are located  /etc/systemd/system
+
+*etcd*: A highly-available distributed key value store for shared configuration and service discovery written in Go. Written by x-heroku guy, it Serves as the backbone of distributed systems by providing a canonical hub for cluster coordination and state management, used by Kubermetes & Cloud Foundry & Fleet. Uses the _Raft_ protocol for multiple nodes to maintain identical logs of state changing commands where any node can be treated as master.
 
 For a group of CoreOS machines to form a cluster, their etcd instances need to be connected. A discovery service, https://discovery.etcd.io, is provided as a free service to help connect etcd instances together by storing a list of peer addresses, metadata and the initial size of the cluster under a unique address, known as the discovery URL - You can generate them very easily:
  curl -w "\n" 'https://discovery.etcd.io/new?size=2'
  
  
+*docker* Containers can boot extremely fast (in milliseconds!) which gives you unprecedented flexibility in managing load across your cluster. They are easier to build than VMs, and because they are decoupled from the underlying infrastructure. For example, instead of running chef on each of your VMs, it’s faster and more reliable to have your build system create a container, When these containers start, they can signal your proxy (via etcd) to start sending them traffic. Immutable container images can be created at build/release time, enables a consistent environment to be carried from development into production
 
+A container is a stripped-to-basics version of a Linux operating system. An image is software you load into a container.
+
+ The docker deamon 1. pull program image from dockerhub (or local), (2) creates a container for the image & runs it (3) stream the stdout toe docker client
+ 
+ > docker run image # runs the image
+ > docker images # list images on the local m/c
+ > create Dockerfile > 
+    FROM node:latest           # define image we want to build from (image with node/npm)
+    RUN mkdir -p /usr/src/app  # create directory to hold the application inside the image
+    WORKDIR /usr/src/app
+    COPY package.json /usr/src/app/ # copy dependencies file and resolve
+    RUN npm install
+    COPY . /usr/src/app     # copy application code
+    EXPOSE 4000             # export port
+    CMD [ "npm", "start" ]  # launch command
+
+
+
+ > docker build -t docker-whale # build a new image (-t tag image)
+ > docker run -p 49160:4000 -d <your username>/node-web-app
+ 
+ > docker [ps|logs|exec]
+ 
+
+*fleet* fleet is a cluster manager that controls systemd at the cluster level, you can treat your CoreOS cluster as if it shared a single init system, It encourages users to write applications as small, ephemeral units that can easily migrate around a cluster of self-updating CoreOS machines
+
+Deploying fleet is as simple as dropping the fleetd binary on a machine with access to etcd and starting it. Deploying fleet on CoreOS is even simpler: just run systemctl start fleet.  The built-in configuration assumes each of your hosts is serving an etcd endpoint at one of the default locations (http://127.0.0.1:4001 or http://127.0.0.1:2379). 
+
+The recommended way to run docker containers on your CoreOS is with *fleet*, a tool that presents your entire cluster as a single init system. fleet works by receiving systemd unit files and scheduling them onto machines in the cluster based on declared conflicts and other preferences encoded in the unit file. With one command, fleet can start many instances of a container across the entire cluster, without requiring a complex deployment script or manual assignment of services to specific machines
+
+> fleetctl list-machines
+MACHINE         IP              METADATA
+53fd2c09...     10.1.0.6        -
+98683544...     10.1.0.5        -
+> fleetctl list-unit-files
+> fleetctl list-units  (running apps)
+
+*ssh keys*
+https://help.ubuntu.com/community/SSH/OpenSSH/Keys
+Public key authentication is more secure than password authentication. This is particularly important if the computer is visible on the internet.
+The authenticating entity has a public key and a private key,  The private key is kept on the computer you log in from, while the public key is stored on the .ssh/authorized_keys file on all the computers you want to log in to, the SSH server uses the public key to "lock" messages in a way that can only be "unlocked" by your private key 
+
+Generating public/private rsa key pair:
+> ssh-keygen -t rsa
+	~/.ssh/id_rsa # identification
+	~/.ssh/id_rsa.pub # public key
+
+
+
+ 
+CoreOS VM "osProfile"."customData" property
+--------------------------------------------
 
 CoreOS Cloud-Config “the defacto multi-distribution package that handles early initialization of a cloud instance”
 CoreOS allows you to declaratively customize various OS-level items, such as network configuration, user accounts, and systemd units. This document describes the full list of items we can configure. The coreos-cloudinit program uses these files as it configures the OS after startup or during runtime.
@@ -23,102 +96,57 @@ debugging:
 systemctl status -l etcd2
 systemctl status -l fleet
 journalctl -xe
+journalctl -u etcd2
 
 
 
-Your cloud-config YAML file is processed during each boot
-	etcd2 : will generate a systemd unit drop-in for etcd.service 
-
-master-config.yaml: cloud-config for the Kubernetes master components
-	Kubectl API server & scheduler
-node-config.yaml: cloud-config for each Kubernetes node
-	has the services necessary to run application containers and be managed from the master systems
-	kubelet  manages pods and their containers, their images, their volumes
-	kube-proxy : runs a simple network proxy and load balancer 
-	runs Docker
-
-ssh keys
-https://help.ubuntu.com/community/SSH/OpenSSH/Keys
-Public key authentication is more secure than password authentication. This is particularly important if the computer is visible on the internet.
-The authenticating entity has a public key and a private key,  The private key is kept on the computer you log in from, while the public key is stored on the .ssh/authorized_keys file on all the computers you want to log in to, the SSH server uses the public key to "lock" messages in a way that can only be "unlocked" by your private key 
-
-Generating public/private rsa key pair:
-ssh-keygen -t rsa
-	~/.ssh/id_rsa # identification
-	~/.ssh/id_rsa.pub # public key
-
-openssl x509: true, 
-102     nodes: true, 
-103     newkey: 'rsa:2048', 
-104     subj: '/O=Weaveworks, Inc./L=London/C=GB/CN=weave.works', 
-out ssh.pem
-keyout: ssh.key
-
-openssl req
-openssl rsa keyin = keyout out: opts.keyout
+install cluster
+---------------
 
 
+https://github.com/deis/workflow/blob/master/src/quickstart/index.md
 
-AZ_SUBSCRIPTION=95efa97a-9b5d-4f74-9f75-a3396e23344d ./create-kubernetes-cluster.js
+curl -w "\n" 'https://discovery.etcd.io/new?size=2'
+New-AzureRmResourceGroupDeployment -ResourceGroupName deisv2 -TemplateFile .\etc2dcluster_vmss.json -TemplateParameterFile .\params.json
+set "discoveryurl" to result of curl
+
+install kubernetes
+http://kubernetes.io/docs/getting-started-guides/binary_release/
+
+export KUBERNETES_PROVIDER=azure
+export AZURE_SUBSCRIPTION_ID=95efa97a-9b5d-4f74-9f75-a3396e23344d
+export AZURE_LOCATION=northeurope
+export AZURE_TENANT_ID=72f988bf-86f1-41af-91ab-2d7cd011db47
+
+wget -q -O - https://get.k8s.io | bash
+## runs ./kubenetes/cluster/azure/get-kube.sh
+  ## runs ./cluster/kube-up.sh
+## creates ~/.kube/config
+
+> kubectl cluster-info
 
 
-azure.queue_default_network(), 
-	'network', 'vnet', 'create',   '--address-space=172.16.0.0',
-azure.queue_storage_if_needed(), 
-	'storage', 'account', 'create', '--type=LRS',
-azure.queue_machines('etcd', 'stable',  kube.create_etcd_cloud_config),
+https://github.com/deis/workflow/blob/master/src/installing-workflow/index.md
 
-	kube.create_etcd_cloud_config
-		var input_file = './cloud_config_templates/kubernetes-cluster-etcd-node-template.yml'; 
-		var output_file = util.join_output_file_path('kubernetes-cluster-etcd-nodes', 'generated.yml'); 
+> curl -sSL https://get.helm.sh | bash
+> sudo mv ./helmc /usr/local/sbin
 
-	
+> helmc target
+> helmc repo add deis https://github.com/deis/charts
+> helmc fetch deis/workflow-beta4             # fetches the chart into a
+                                              # local workspace
+> helmc generate -x manifests workflow-beta4  # generates various secrets
+> helmc install workflow-beta4  
 
-	'vm', 'create',
-	'--ssh-cert=' + conf.resources['ssh_key']['pem']
-	--ssh=<%= port %>
-        --custom-data=<%= cloud_config_file %>
+> kubectl get pods  --namespace=deis
 
-	hosts.ssh_port_counter += 1;
-kube.create_etcd_cloud_config), 
+> kubectl get services --namespace=deis
+> kubectl get services deis-controller --namespace=deis
+> kubectl describe services  deis-controller --namespace=deis
 
-azure.queue_machines('kube', 'stable', 
 
-kube.create_node_cloud_config), 
+https://github.com/deis/workflow/blob/master/src/quickstart/deploy-an-app.md
 
--------------
+deploy app
 
-https://github.com/Azure/azure-quickstart-templates/blob/master/coreos-with-fleet-multivm/azuredeploy.json
-
-#cloud-config
-coreos:
-  etcd2:
-    discovery: discoveryUrl,
-    advertise-client-urls: http://$private_ipv4:2379,http://$private_ipv4:4001
-    initial-advertise-peer-urls: http://$private_ipv4:2380
-    listen-client-urls: http://0.0.0.0:2379,http://0.0.0.0:4001
-    listen-peer-urls: http://$private_ipv4:2380
-  units:
-    - name: etcd2.service
-      command: start
-    - name: fleet.service
-      command: start'
-
-~/kubernetes/docs/getting-started-guides/coreos/azure/cloud_config_templates
-
-coreos:
-  units:
-    - name: etcd2.service
-      enable: true
-      command: start
-  etcd2:
-    name: '%H'
-    initial-cluster-token: 'etcd-cluster'
-    initial-advertise-peer-urls: 'http://%H:2380'
-    listen-peer-urls: 'http://%H:2380'
-    listen-client-urls: 'http://0.0.0.0:2379,http://0.0.0.0:4001'
-    advertise-client-urls: 'http://%H:2379,http://%H:4001'
-    initial-cluster-state: 'new'
-  update:
-    group: stable
-    reboot-strategy: off
+> deis register http://deis.104.197.125.75.nip.io
