@@ -121,6 +121,15 @@ export AZURE_TENANT_ID=72f988bf-86f1-41af-91ab-2d7cd011db47
 wget -q -O - https://get.k8s.io | bash
 ## runs ./kubenetes/cluster/azure/get-kube.sh
   ## runs ./cluster/kube-up.sh
+     ## runs ./cluster/azure/util.sh (function kube-up)
+     
+     azure-deploy
+
+    kubectl config set-cluster "${AZURE_DEPLOY_ID}" --server="https://${AZURE_DEPLOY_ID}.${AZURE_LOCATION}.cloudapp.azure.com:6443" --certificate-authority="${AZURE_OUTPUT_DIR}/ca.crt" --api-version="v1"
+    kubectl config set-credentials "${AZURE_DEPLOY_ID}_user" --client-certificate="${AZURE_OUTPUT_DIR}/client.crt" --client-key="${AZURE_OUTPUT_DIR}/client.key"
+    kubectl config set-context "${AZURE_DEPLOY_ID}" --cluster="${AZURE_DEPLOY_ID}" --user="${AZURE_DEPLOY_ID}_user"
+    kubectl config use-context "${AZURE_DEPLOY_ID}"
+    
 ## creates ~/.kube/config
 
 > kubectl cluster-info
