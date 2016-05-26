@@ -142,19 +142,27 @@ wget -q -O - https://get.k8s.io | bash
 https://github.com/deis/workflow/blob/master/src/installing-workflow/index.md
 
 > curl -sSL https://get.helm.sh | bash
+
 > sudo mv ./helmc /usr/local/sbin
 
 > helmc target
+
 > helmc repo add deis https://github.com/deis/charts
+
 > helmc fetch deis/workflow-beta4             # fetches the chart into a
                                               # local workspace
+                                              
 > helmc generate -x manifests workflow-beta4  # generates various secrets
+
 > helmc install workflow-beta4  
+
 
 > kubectl get pods  --namespace=deis
 
 > kubectl get services --namespace=deis
+
 > kubectl get services deis-controller --namespace=deis
+
 > kubectl describe services  deis-controller --namespace=deis
 
 
